@@ -1,14 +1,11 @@
 package com.demo.MixSplit.Split;
-import be.tarsos.dsp.AudioDispatcher;
-import be.tarsos.dsp.beatroot.BeatRootOnsetEventHandler;
-import be.tarsos.dsp.io.jvm.AudioDispatcherFactory;
-import be.tarsos.dsp.onsets.ComplexOnsetDetector;
-import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -40,6 +37,8 @@ public class SplitService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    private static final int POLLING_INTERVAL_MS = 10000; // 10 seconds
 
     public SplitService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
@@ -119,6 +118,103 @@ public class SplitService {
         }
     }
 
+    public ResponseEntity<JsonNode> uploadFileACRCloud(){
+
+        // Upload file to acrcloud and grab the id
+        String id = getId();
+        try {
+            Thread.sleep(20000); // 20 seconds delay
+            return getSongs(id);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Failed to wait for processing", e);
+        }
+    }
+
+    public ResponseEntity<JsonNode> getSongs(String fileId) {
+        RestTemplate restTemplate = new RestTemplate();
+        String token = acrConfig.getToken();
+
+        // Declaring where we're going to get this song from ACRCloud
+        int containerId = 18449;
+        String requestUrl = String.format("https://api-v2.acrcloud.com/api/fs-containers/%d/files/%s", containerId, fileId);
+
+        // Initializing headers
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
+        headers.setBearerAuth(token);
+
+        HttpEntity<?> requestEntity = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    requestUrl,
+                    HttpMethod.GET,
+                    requestEntity,
+                    String.class
+            );
+
+            // Convert response body to JSON
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode responseBody = objectMapper.readTree(response.getBody());
+            System.out.println(responseBody.textValue());
+            return new ResponseEntity<>(responseBody, response.getStatusCode());
+
+        } catch (HttpServerErrorException | JsonProcessingException e) {
+            // Log and return error details
+            e.printStackTrace();
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+
+
+    private String getId(){
+        RestTemplate restTemplate = new RestTemplate();
+        String token = acrConfig.getToken();
+        //importing our music
+        File path = new File("H:/MixSplit/src/music/DrakeMix.mp3");
+        FileSystemResource song = new FileSystemResource(path);
+
+        //Declaring were going to post this song to ACRCloud
+        String httpMethod = "POST";
+        int container_id = 18449;
+        String requestUrl = "https://api-v2.acrcloud.com/api/fs-containers/18449/files";
+
+
+        //Intializing headers
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.setBearerAuth(token);
+
+        // Create body
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", song);
+        body.add("data_type", "audio");
+        body.add("name", "Drake Mix Test 1");
+
+        HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body,headers);
+
+        // Making the request and returning json
+        try {
+            ResponseEntity<ACRResult> response = restTemplate.exchange(requestUrl, HttpMethod.POST, requestEntity, ACRResult.class);
+            String id = "";
+            ACRResult apiResponse = response.getBody();
+            if (response.getStatusCode().is2xxSuccessful()){
+                // Wait 20 seconds and call function to get all the songs
+                ACRResult.Data data = apiResponse.getData();
+                if (data!=null){
+                    id = data.getId();
+                    System.out.println(id);
+                }
+            }
+            return id;
+
+        } catch (HttpServerErrorException e) {
+            // Log and return error details
+            e.printStackTrace();
+            return "";
+        }
+    }
     public ResponseEntity<JsonNode> getSplit(){
         RestTemplate restTemplate = new RestTemplate();
         String token = acrConfig.getToken();
@@ -147,13 +243,20 @@ public class SplitService {
 
         // Making the request and returning json
         try {
-            ResponseEntity<String> response = restTemplate.exchange(requestUrl, HttpMethod.POST, requestEntity, String.class);
-
-            // Convert response body to JSON
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode responseBody = objectMapper.readTree(response.getBody());
-
-            return new ResponseEntity<>(responseBody, response.getStatusCode());
+            ResponseEntity<ACRResult> response = restTemplate.exchange(requestUrl, HttpMethod.POST, requestEntity, ACRResult.class);
+            String id = "";
+            ACRResult apiResponse = response.getBody();
+            if (response.getStatusCode().is2xxSuccessful()){
+                // Wait 20 seconds and call function to get all the songs
+                ACRResult.Data data = apiResponse.getData();
+                if (data!=null){
+                    id = data.getId();
+                    System.out.println(id);
+                }
+                Thread.sleep(20000);
+                getSongs(id);
+            }
+            return new ResponseEntity<>(response.getStatusCode());
 
         } catch (HttpServerErrorException e) {
             // Log and return error details

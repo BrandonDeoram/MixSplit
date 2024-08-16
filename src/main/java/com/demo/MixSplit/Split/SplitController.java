@@ -2,11 +2,10 @@ package com.demo.MixSplit.Split;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import java.util.List;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping(path = "api/v1/split")
@@ -22,6 +21,11 @@ public class SplitController {
     }
 
     @GetMapping(value = "/drake")
-    public ResponseEntity<JsonNode> getSplit(){return splitService.getSplit();}
+    public ResponseEntity<JsonNode> getSplit(){return splitService.uploadFileACRCloud();}
+
+    @GetMapping("/upload-callback")
+    public ResponseEntity<JsonNode> handleCallback() {
+        return splitService.getSongs("b044f884-b5d4-42b4-9776-41a2792cb35a");
+    }
 
 }
