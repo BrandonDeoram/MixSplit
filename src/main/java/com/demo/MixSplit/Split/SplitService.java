@@ -1,72 +1,49 @@
 package com.demo.MixSplit.Split;
+import com.demo.MixSplit.DTO.MusicResultDTO;
+import com.demo.MixSplit.Utility.ACRHeaders;
+import com.demo.MixSplit.Utility.AudioUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.*;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
-import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-import java.util.Map;
-
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.commons.codec.binary.Base64;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import javax.sound.sampled.UnsupportedAudioFileException;
+import org.springframework.web.multipart.MultipartFile;
+
 
 @Service
 public class SplitService {
-    @Autowired
-    private ACRConfig acrConfig;
-
-    @Autowired
-    private RestTemplate restTemplate;
-
-    @Autowired
-    private ObjectMapper objectMapper;
+    private final ACRConfig acrConfig;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
 
     private static final int POLLING_INTERVAL_MS = 10000; // 10 seconds
 
-    public SplitService(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
-    }
-    private String encodeBase64(byte[] bstr) {
-        Base64 base64 = new Base64();
-        return new String(base64.encode(bstr));
+    @Autowired
+    public SplitService(ACRConfig acrConfig, RestTemplateBuilder restTemplateBuilder, ObjectMapper objectMapper) {
+        this.acrConfig = acrConfig;
+        this.restTemplate = restTemplateBuilder.build();
+        this.objectMapper = objectMapper;
     }
 
-    private String encryptByHMACSHA1(byte[] data, byte[] key) {
-        try {
-            SecretKeySpec signingKey = new SecretKeySpec(key, "HmacSHA1");
-            Mac mac = Mac.getInstance("HmacSHA1");
-            mac.init(signingKey);
-            byte[] rawHmac = mac.doFinal(data);
-            return encodeBase64(rawHmac);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return "";
-    }
     public String findSong() {
         String host = acrConfig.getHost();
         String accessKey = acrConfig.getAccessKey();
         String accessSecret = acrConfig.getAccessSecret();
 
-        byte[] byteArray = audioToBytes("H:/MixSplit/src/music/mewtwo.mp3");
-//        System.out.println(Arrays.toString(byteArray));
+        byte[] byteArray = AudioUtils.audioToBytes("H:/MixSplit/src/music/mewtwo.mp3");
+
 
         String url = "https://identify-us-west-2.acrcloud.com/v1/identify";
         String httpMethod = "POST";
@@ -75,53 +52,38 @@ public class SplitService {
         String dataType = "audio"; // or "fingerprint"
         String signatureVersion = "1";
 
-        try{
-            String stringToSign = httpMethod + "\n" + httpUri + "\n" + accessKey + "\n" + dataType + "\n" + signatureVersion + "\n" + timestamp;
 
-            Mac sha1Hmac = Mac.getInstance("HmacSHA1");
-            SecretKeySpec secretKeySpec = new SecretKeySpec(accessSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA1");
-            sha1Hmac.init(secretKeySpec);
+        String stringToSign = httpMethod + "\n" + httpUri + "\n" + accessKey + "\n" + dataType + "\n" + signatureVersion + "\n" + timestamp;
+        String signature = AudioUtils.generateSignature(stringToSign, acrConfig.getAccessSecret());
+        HttpHeaders headers = ACRHeaders.createHeaders(acrConfig.getToken());
+        String audioBase64 = Base64.encodeBase64String(byteArray);
 
-            byte[] hash = sha1Hmac.doFinal(stringToSign.getBytes(StandardCharsets.UTF_8));
-            String signature = Base64.encodeBase64String(hash);
-            System.out.println("fnishied signature");
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("sample", audioBase64);
+        body.add("access_key", accessKey);
+        body.add("sample_bytes", String.valueOf(byteArray.length)); // Size of the byte array
+        body.add("timestamp", timestamp);
+        body.add("signature", signature);
+        body.add("data_type", dataType);
+        body.add("signature_version", signatureVersion);
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Content-Type", "application/x-www-form-urlencoded");
 
-            String audioBase64 = Base64.encodeBase64String(byteArray);
-
-            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-            body.add("sample", audioBase64);
-            body.add("access_key", accessKey);
-            body.add("sample_bytes", String.valueOf(byteArray.length)); // Size of the byte array
-            body.add("timestamp", timestamp);
-            body.add("signature", signature);
-            body.add("data_type", dataType);
-            body.add("signature_version", signatureVersion);
-
-            HttpEntity<MultiValueMap<String,String>> entity = new HttpEntity<>(body,headers);
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST,entity,String.class);
-            System.out.println("fnishied sending response" + response.getBody() + response.toString());
-            return response.getBody();
-        }catch (NoSuchAlgorithmException | InvalidKeyException e) {
-            throw new RuntimeException("Error generating signature: " + e.getMessage());
-        }
-    }
-    public byte[] audioToBytes (String absPath){
-        Path path = Paths.get(absPath);
+        ResponseEntity<String> response;
         try {
-            byte[] audioBytes = Files.readAllBytes(path);
-            return audioBytes;
-        } catch (IOException e) {
+            HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(body, headers);
+            response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            System.out.println("finished sending response" + response.getBody() + response.toString());
+        } catch (RestClientException e) {
             throw new RuntimeException(e);
         }
+        return response.getBody();
     }
 
-    public ResponseEntity<JsonNode> uploadFileACRCloud(){
+    // We also need to store the results of this somewhere in our database which should we attached to our user
+    public ResponseEntity<List<MusicResultDTO>> uploadFileACRCloud(MultipartFile file, String filename) throws IOException {
 
         // Upload file to acrcloud and grab the id
-        String id = getId();
+        String id = getId(file, filename);
         try {
             Thread.sleep(20000); // 20 seconds delay
             return getSongs(id);
@@ -131,20 +93,14 @@ public class SplitService {
         }
     }
 
-    public ResponseEntity<JsonNode> getSongs(String fileId) {
-        RestTemplate restTemplate = new RestTemplate();
+    public ResponseEntity<List<MusicResultDTO>> getSongs(String fileId) {
         String token = acrConfig.getToken();
-
-        // Declaring where we're going to get this song from ACRCloud
         int containerId = 18449;
         String requestUrl = String.format("https://api-v2.acrcloud.com/api/fs-containers/%d/files/%s", containerId, fileId);
 
-        // Initializing headers
-        HttpHeaders headers = new HttpHeaders();
-        headers.set(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
-        headers.setBearerAuth(token);
-
+        HttpHeaders headers = ACRHeaders.createMultipartHeaders(acrConfig.getToken());
         HttpEntity<?> requestEntity = new HttpEntity<>(headers);
+
         try {
             ResponseEntity<String> response = restTemplate.exchange(
                     requestUrl,
@@ -153,44 +109,94 @@ public class SplitService {
                     String.class
             );
 
-            // Convert response body to JSON
             ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode responseBody = objectMapper.readTree(response.getBody());
-            System.out.println(responseBody.textValue());
-            return new ResponseEntity<>(responseBody, response.getStatusCode());
-
-        } catch (HttpServerErrorException | JsonProcessingException e) {
-            // Log and return error details
-            e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            JsonNode rootNode = objectMapper.readTree(response.getBody());
+            JsonNode dataNode = rootNode.get("data");
+            return new ResponseEntity<>(extractMusicResultDTO(dataNode), response.getStatusCode());
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Error processing JSON response", e);
         }
     }
 
+    private List<MusicResultDTO> extractMusicResultDTO(JsonNode dataNode){
+        try {
+            String prettyJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(dataNode);
+            System.out.println("Contents of dataNode:");
+            System.out.println(prettyJson);
+        } catch (JsonProcessingException e) {
+            System.err.println("Error pretty-printing JSON: " + e.getMessage());
+        }
+        List<MusicResultDTO> musicResults = new ArrayList<>();
 
+        if (dataNode != null && dataNode.isArray()) {
 
-    private String getId(){
-        RestTemplate restTemplate = new RestTemplate();
-        String token = acrConfig.getToken();
-        //importing our music
-        File path = new File("H:/MixSplit/src/music/DrakeMix.mp3");
-        FileSystemResource song = new FileSystemResource(path);
+            for (JsonNode songNode : dataNode) {
+                List<String> artistNames = new ArrayList<>();
+                String id = songNode.path("id").asText();
+                int uid = songNode.path("uid").asInt();
+                int cid = songNode.path("cid").asInt();
+                String name = songNode.path("name").asText();
+
+                JsonNode resultsNode = songNode.path("results");
+                JsonNode musicArrayNode = resultsNode.path("music");
+
+                if (musicArrayNode.isArray()) {
+                    for (JsonNode musicNode : musicArrayNode) {
+                        JsonNode resultNode = musicNode.path("result");
+                        JsonNode externalMetadataNode = resultNode.path("external_metadata");
+                        JsonNode spotifyNode = externalMetadataNode.path("spotify");
+                        JsonNode spotifyArtistsNode = spotifyNode.path("artists");
+                        if (!spotifyNode.isMissingNode()) {
+                            JsonNode trackNode = spotifyNode.path("track");
+                            if (!trackNode.isMissingNode()) {
+                                if (spotifyArtistsNode.isArray()) {
+                                    artistNames = new ArrayList<>();
+                                    for (JsonNode artistNode : spotifyArtistsNode) {
+                                        String artistName = artistNode.path("name").asText();
+                                        if (!artistName.isEmpty()) {
+                                            artistNames.add(artistName);
+                                        }
+                                    }
+
+                                }
+                                else{
+                                    System.out.println("not a array");
+                                }
+
+                                String spotifyId = trackNode.path("id").asText();
+                                String trackName = trackNode.path("name").asText();
+
+                                MusicResultDTO musicResultDTO = new MusicResultDTO();
+                                musicResultDTO.setId(id);
+                                musicResultDTO.setUid(uid);
+                                musicResultDTO.setCid(cid);
+                                musicResultDTO.setName(trackName);
+                                musicResultDTO.setSpotify(spotifyId);
+                                musicResultDTO.setArtistNames(artistNames);
+                                musicResults.add(musicResultDTO);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return musicResults;
+    }
+
+    private String getId(MultipartFile file,String filename) throws IOException {
 
         //Declaring were going to post this song to ACRCloud
         String httpMethod = "POST";
         int container_id = 18449;
         String requestUrl = "https://api-v2.acrcloud.com/api/fs-containers/18449/files";
+        HttpHeaders headers = ACRHeaders.createMultipartHeaders(acrConfig.getToken());
 
-
-        //Intializing headers
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        headers.setBearerAuth(token);
 
         // Create body
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", song);
+        body.add("file", new MultipartFileResource(file));
         body.add("data_type", "audio");
-        body.add("name", "Drake Mix Test 1");
+        body.add("name", filename);
 
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body,headers);
 
@@ -215,77 +221,21 @@ public class SplitService {
             return "";
         }
     }
-    public ResponseEntity<JsonNode> getSplit(){
-        RestTemplate restTemplate = new RestTemplate();
-        String token = acrConfig.getToken();
-        //importing our music
-        File path = new File("H:/MixSplit/src/music/DrakeMix.mp3");
-        FileSystemResource song = new FileSystemResource(path);
-
-        //Declaring were going to post this song to ACRCloud
-        String httpMethod = "POST";
-        int container_id = 18449;
-        String requestUrl = "https://api-v2.acrcloud.com/api/fs-containers/18449/files";
 
 
-        //Intializing headers
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        headers.setBearerAuth(token);
+    private static class MultipartFileResource extends ByteArrayResource {
+        private final String filename;
 
-        // Create body
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", song);
-        body.add("data_type", "audio");
-        body.add("name", "Drake Mix Test 1");
+        public MultipartFileResource(MultipartFile multipartFile) throws IOException {
+            super(multipartFile.getBytes());
+            this.filename = multipartFile.getOriginalFilename();
+        }
 
-        HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body,headers);
-
-        // Making the request and returning json
-        try {
-            ResponseEntity<ACRResult> response = restTemplate.exchange(requestUrl, HttpMethod.POST, requestEntity, ACRResult.class);
-            String id = "";
-            ACRResult apiResponse = response.getBody();
-            if (response.getStatusCode().is2xxSuccessful()){
-                // Wait 20 seconds and call function to get all the songs
-                ACRResult.Data data = apiResponse.getData();
-                if (data!=null){
-                    id = data.getId();
-                    System.out.println(id);
-                }
-                Thread.sleep(20000);
-                getSongs(id);
-            }
-            return new ResponseEntity<>(response.getStatusCode());
-
-        } catch (HttpServerErrorException e) {
-            // Log and return error details
-            e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        } catch (HttpClientErrorException e) {
-            // Log and return client error details
-            e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        } catch (Exception e) {
-            // Log any other exceptions
-            e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        @Override
+        public String getFilename() {
+            return this.filename;
         }
     }
-
-
-
-
-
-    // 1. Download soundcloud mix locally for now.
-
-    // 2. Split the song using ACR Cloud & get Timestamp + Song Name & Artist
-
-    // 3. Create a new playlist on the user soundcloud profile
-
-    // 4. Search for each individual song on soundcloud and take the top results and add to playlist
-
-
 
 
 }
