@@ -9,6 +9,41 @@ public class MusicResultDTO {
     private String spotifyId;
     private List<String> artistNames;
 
+    public void setStartTime(String startTime) {
+        this.startTime = startTime;
+    }
+
+    public void setEndTime(String endTime) {
+        this.endTime = endTime;
+    }
+
+    private String startTime;
+    private String endTime;
+
+    public MusicResultDTO(String id, int uid, int cid, String name, String spotifyId, List<String> artistNames, String startTime, String endTime) {
+        this.id = id;
+        this.uid = uid;
+        this.cid = cid;
+        this.name = name;
+        this.spotifyId = spotifyId;
+        this.artistNames = artistNames;
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
+
+    public String getStartTime() {
+        return startTime;
+    }
+
+    public String getEndTime() {
+        return endTime;
+    }
+
+
+    public MusicResultDTO(String id) {
+        this.id = id;
+    }
+
 
     public List<String> getArtistNames() {
         return artistNames;
