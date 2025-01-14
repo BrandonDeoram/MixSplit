@@ -9,6 +9,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 
 @RestController
 @RequestMapping("/s3")
@@ -36,6 +37,19 @@ public class S3Controller {
                 convFile.delete();
             }
         }
+    }
+
+    // Generate presigned url for upload
+    @GetMapping("/presigned-url")
+    public String getPresignedUrl(@RequestParam String fileName){
+        try{
+            return String.valueOf(s3Service.generatePresignedUrl(fileName));
+        }
+        catch (Exception e){
+            String error = "Failed to generate presigned url: " + e.getMessage();
+            return error.toString();
+        }
+
     }
 
 

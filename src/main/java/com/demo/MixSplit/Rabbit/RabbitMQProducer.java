@@ -1,26 +1,19 @@
 package com.demo.MixSplit.Rabbit;
 
+import com.demo.MixSplit.DTO.UploadFile;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Value;
+import com.demo.MixSplit.Config.RabbitMQConfig;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class RabbitMQProducer {
 
-    private final RabbitTemplate rabbitTemplate;
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
-    @Value("${rabbitmq.exchange}")
-    private String exchange;
-
-    @Value("${rabbitmq.routing-key}")
-    private String routingKey;
-
-    public RabbitMQProducer(RabbitTemplate rabbitTemplate) {
-        this.rabbitTemplate = rabbitTemplate;
-    }
-
-    public void sendMessage(String message) {
-        rabbitTemplate.convertAndSend(exchange, routingKey, message);
-        System.out.println("Message sent: " + message);
+    public void sendMessage(UploadFile file) {
+        rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, RabbitMQConfig.ROUTING_KEY, file);
+        System.out.println("Message sent: " + file);
     }
 }
