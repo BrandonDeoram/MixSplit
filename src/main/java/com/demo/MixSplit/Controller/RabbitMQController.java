@@ -1,9 +1,9 @@
 package com.demo.MixSplit.Controller;
 import com.demo.MixSplit.DTO.UploadFile;
-import com.demo.MixSplit.Entity.Upload;
+import com.demo.MixSplit.Entity.AudioFile;
 import com.demo.MixSplit.Rabbit.RabbitMQProducer;
-import com.demo.MixSplit.Repository.UploadRepository;
-import com.demo.MixSplit.Service.UploadService;
+import com.demo.MixSplit.Repository.AudioFileRepository;
+import com.demo.MixSplit.Service.AudioFileService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,28 +16,20 @@ import java.util.List;
 public class RabbitMQController {
 
     private final RabbitMQProducer producer;
-    private final UploadService uploadService;
-    private final UploadRepository uploadRepository;
+    private final AudioFileRepository audioFileRepository;
     @Autowired
-    public RabbitMQController(RabbitMQProducer rabbitMQProducer, UploadService uploadService, UploadRepository uploadRepository) {
+    public RabbitMQController(RabbitMQProducer rabbitMQProducer,AudioFileRepository audioFileRepository) {
         this.producer = rabbitMQProducer;
-        this.uploadService = uploadService;
-        this.uploadRepository = uploadRepository;
+        this.audioFileRepository = audioFileRepository;
     }
 
     @PostMapping
     public String sendMessage(@Valid @RequestBody UploadFile req) {
-        log.info("Entered");
-        // Save to database
+        log.info("In send message function");
         try {
-            Upload upload = uploadService.saveUpload(req.getUserId(), req.getS3Key(), req.fileName);
-            log.info("Saved in database with id ", req.getUserId());
 
-            // Send this message to Queue
-            // userid, s3Key, fileName
             producer.sendMessage(req);
             log.info("Message sent to queuand e for userId: {}", req.getUserId());
-
             return "Message sent: " + req.toString();
 
         } catch (Exception e) {
@@ -47,8 +39,8 @@ public class RabbitMQController {
     }
     // Returns all the current uploads in database
     @GetMapping
-    public List<Upload> getAllUploads(){
-        List<Upload> uploads = uploadRepository.findAll();
+    public List<AudioFile> getAllUploads(){
+        List<AudioFile> uploads = audioFileRepository.findAll();
         uploads.forEach(upload -> System.out.println("printing uploads:" +upload.toString()));
         return uploads;
     }

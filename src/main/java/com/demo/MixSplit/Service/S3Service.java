@@ -1,5 +1,6 @@
 package com.demo.MixSplit.Service;
 
+import com.amazonaws.HttpMethod;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.*;
 import com.demo.MixSplit.DTO.ApiResponse;
@@ -27,28 +28,48 @@ public class S3Service {
     }
     // Upload file to S3 bucket - Smaller files 100MB
 
-    public ApiResponse uploadFile(File file) {
-        if (file.length() > MULTIPART_THRESHOLD){
-            uploadLargeFile(file);
-        }
-        else{
-            try {
-                amazonS3.putObject(new PutObjectRequest(bucketName, file.getName(), file));
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                return new ApiResponse(500,"Error uploading file: " + e.getMessage());
-            }
-        }
-        return new ApiResponse(200, "File uploaded successfully");
-
-    }
+//    public ApiResponse uploadFile(File file) {
+//        if (file.length() > MULTIPART_THRESHOLD){
+//            uploadLargeFile(file);
+//        }
+//        else{
+//            try {
+//                amazonS3.putObject(new PutObjectRequest(bucketName, file.getName(), file));
+//
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//                return new ApiResponse(500,"Error uploading file: " + e.getMessage());
+//            }
+//        }
+//        return new ApiResponse(200, "File uploaded successfully");
+//
+//    }
     public S3Object downloadFile(String fileName) {
         return amazonS3.getObject(bucketName, fileName);
     }
+
     public URL generatePresignedUrl(String fileName){
         Date expiration = new Date(System.currentTimeMillis() + 1000 * 60 * 60);
-        return this.amazonS3.generatePresignedUrl(bucketName,fileName,expiration);
+        GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, fileName)
+                .withMethod(HttpMethod.PUT)
+                .withExpiration(expiration)
+                .withContentType("audio/mpeg");
+        return this.amazonS3.generatePresignedUrl(request);
+    }
+    public URL generateReadPresignedUrl(String fileName) {
+        try {
+            // Set expiration time to 1 hour from now
+            Date expiration = new Date(System.currentTimeMillis() + 1000 * 60 * 60);
+
+            GeneratePresignedUrlRequest generatePresignedUrlRequest =
+                    new GeneratePresignedUrlRequest(bucketName, fileName)
+                            .withMethod(HttpMethod.GET)
+                            .withExpiration(expiration);
+
+            return amazonS3.generatePresignedUrl(generatePresignedUrlRequest);
+        } catch (AmazonS3Exception e) {
+            throw new RuntimeException("Failed to generate read presigned URL", e);
+        }
     }
     private void uploadLargeFile(File file) {
         // Initiate the multipart upload

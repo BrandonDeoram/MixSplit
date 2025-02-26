@@ -3,7 +3,7 @@ import com.demo.MixSplit.Utility.UploadStatus;
 import jakarta.persistence.*;
 
 @Entity
-public class Upload {
+public class AudioFile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -12,7 +12,10 @@ public class Upload {
     @Column(name ="user_id",nullable = false)
     private Long userId;
 
-    @Column(name = "s3key",nullable = false)
+    @Column(name ="acr_id",nullable = true)
+    private String acrId;
+
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String s3Key;
 
     @Column(name = "file_name",nullable = false)
@@ -22,14 +25,15 @@ public class Upload {
     @Column(name = "status",nullable = false)
     private UploadStatus status = UploadStatus.PENDING;
 
-    public Upload(Long userId, String s3Key, String fileName) {
+    public AudioFile(Long userId, String acrId, String s3Key, String fileName) {
         this.userId = userId;
+        this.acrId = acrId;
         this.s3Key = s3Key;
         this.fileName = fileName;
         this.status = status;
     }
 
-    public Upload() {
+    public AudioFile() {
     }
 
 
@@ -48,6 +52,14 @@ public class Upload {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public String getAcrId() {
+        return acrId;
+    }
+
+    public void setAcrId(String acrId) {
+        this.acrId = acrId;
     }
 
     public String getS3Key() {
@@ -73,4 +85,5 @@ public class Upload {
     public void setFileName(String fileName) {
         this.fileName = fileName;
     }
+
 }

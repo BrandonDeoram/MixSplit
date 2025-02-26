@@ -7,6 +7,7 @@ import com.demo.MixSplit.Utility.AudioUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.Base64;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -27,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
+@Slf4j
 @Service
 public class SplitService {
     private final ACRConfig acrConfig;
@@ -361,6 +362,41 @@ public class SplitService {
             return "";
         }
     }
+    public String uploadAudioACR(String url,String filename) throws IOException {
+
+        //Declaring were going to post this song to ACRCloud
+        String httpMethod = "POST";
+        int container_id = 18449;
+        String requestUrl = "https://api-v2.acrcloud.com/api/fs-containers/18449/files";
+        HttpHeaders headers = ACRHeaders.createMultipartHeaders(acrConfig.getToken());
+
+
+        MultiValueMap<String, Object> body = createRequestBodyURL(url, filename);
+
+        HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body,headers);
+
+        // Making the request and returning json
+        try {
+            ResponseEntity<ACRResult> response = restTemplate.exchange(requestUrl, HttpMethod.POST, requestEntity, ACRResult.class);
+            String id = "";
+            ACRResult apiResponse = response.getBody();
+            if (response.getStatusCode().is2xxSuccessful()){
+                // Wait 20 seconds and call function to get all the songs
+                ACRResult.Data data = apiResponse.getData();
+                if (data!=null){
+                    id = data.getId();
+                    System.out.println(id);
+                }
+            }
+            return id;
+
+        } catch (HttpServerErrorException e) {
+            // Log and return error details
+            log.error("Error getting id from acr cloud",e);
+            e.printStackTrace();
+            return null;
+        }
+    }
     private MultiValueMap<String, Object> createRequestBody(MultipartFile file, String filename) throws IOException {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new MultipartFileResource(file));
@@ -368,7 +404,13 @@ public class SplitService {
         body.add("name", filename);
         return body;
     }
-
+    private MultiValueMap<String, Object> createRequestBodyURL(String url, String filename) throws IOException {
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("url",url);
+        body.add("data_type", "platforms");
+        body.add("name", filename);
+        return body;
+    }
 
     private static class MultipartFileResource extends ByteArrayResource {
         private final String filename;

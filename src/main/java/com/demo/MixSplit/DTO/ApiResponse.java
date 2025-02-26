@@ -1,29 +1,15 @@
 package com.demo.MixSplit.DTO;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.Builder;
+import lombok.Data;
+import java.util.Map;
 
+@Data
+@Builder
 public class ApiResponse {
-    private int statusCode;
-    private String message;
+    private String status;
+    private Map<String, Object> data;
 
-    // Constructors
-    public ApiResponse(int statusCode, String message) {
-        this.statusCode = statusCode;
-        this.message = message;
-    }
-
-    // Getters and setters
-    public int getStatusCode() {
-        return statusCode;
-    }
-
-    public void setStatusCode(int statusCode) {
-        this.statusCode = statusCode;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Map<String, Object> error;
 }

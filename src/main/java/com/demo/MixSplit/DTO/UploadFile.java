@@ -7,6 +7,9 @@ public class UploadFile implements Serializable {
 
     @NotBlank(message = "User ID is required")
     private Long userId;
+
+    private String acrId;
+
     @NotBlank(message = "S3 Key is required")
     private String s3Key;
     public String fileName;
@@ -17,6 +20,14 @@ public class UploadFile implements Serializable {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public String getAcrId() {
+        return acrId;
+    }
+
+    public void setAcrId(String acrId) {
+        this.acrId = acrId;
     }
 
     public String getS3Key() {
@@ -37,7 +48,7 @@ public class UploadFile implements Serializable {
 
     @Override
     public String toString() {
-        return "UploadFile{" +
+        return "AudioFile{" +
                 "userId=" + userId +
                 ", s3Key='" + s3Key + '\'' +
                 ", fileName='" + fileName + '\'' +
